@@ -117,6 +117,10 @@ export async function transferHBAR(
   };
 }
 
+export function ensureEnvLoaded(): void {
+  loadEnv();
+}
+
 export function closeClient(): void {
   testnetClient?.close();
   testnetClient = null;
