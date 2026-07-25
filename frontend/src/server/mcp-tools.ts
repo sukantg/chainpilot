@@ -31,7 +31,18 @@ interface BackendModules {
     protocolB: string;
     amount: number;
     recipient?: string;
+    paymentAlreadySettled?: boolean;
+    paymentTxId?: string;
+    paymentStatus?: string;
   }) => Promise<{ report: string; payment: Record<string, unknown> }>;
+  hashResult: (data: unknown) => string;
+  logReceiptToHCS: (payload: {
+    tool: string;
+    paymentTxId: string;
+    payer?: string;
+    args?: Record<string, unknown>;
+    resultHash: string;
+  }) => Promise<string>;
 }
 
 let backendPromise: Promise<BackendModules> | null = null;
@@ -42,12 +53,13 @@ async function loadBackend(): Promise<BackendModules> {
   const importFromDist = (modulePath: string) =>
     import(/* webpackIgnore: true */ pathToFileURL(path.join(dist, modulePath)).href);
 
-  const [compare, client, config, hedera, research] = await Promise.all([
+  const [compare, client, config, hedera, research, hcs] = await Promise.all([
     importFromDist('graph/compare.js'),
     importFromDist('graph/client.js'),
     importFromDist('graph/config.js'),
     importFromDist('hedera/client.js'),
     importFromDist('src/purchase-research.js'),
+    importFromDist('hedera/hcs.js'),
   ]);
 
   return {
@@ -58,6 +70,8 @@ async function loadBackend(): Promise<BackendModules> {
     getBalance: hedera.getBalance,
     transferHBAR: hedera.transferHBAR,
     purchaseResearch: research.purchaseResearch,
+    hashResult: hcs.hashResult,
+    logReceiptToHCS: hcs.logReceiptToHCS,
   };
 }
 
@@ -68,88 +82,155 @@ function getBackend(): Promise<BackendModules> {
   return backendPromise;
 }
 
+export interface ExecuteMcpToolOptions {
+  paymentAlreadySettled?: boolean;
+  paymentTxId?: string;
+  paymentStatus?: string;
+  payer?: string;
+}
+
+export type McpToolResultWithReceipt = McpToolResult & {
+  receipt?: { hcsTxId: string; resultHash: string };
+};
+
 export async function executeMcpTool(
   name: McpToolName,
   args: Record<string, unknown> = {},
-): Promise<McpToolResult> {
-  try {
-    const backend = await getBackend();
+  options: ExecuteMcpToolOptions = {},
+): Promise<McpToolResultWithReceipt> {
+  const backend = await getBackend();
 
+  let result: McpToolResult;
+
+  try {
     switch (name) {
       case 'hello':
-        return { data: { message: 'Hello from ChainPilot' }, isError: false };
+        result = { data: { message: 'Hello from ChainPilot' }, isError: false };
+        break;
 
       case 'list_protocols':
-        return { data: { protocols: backend.listProtocols() }, isError: false };
+        result = { data: { protocols: backend.listProtocols() }, isError: false };
+        break;
 
       case 'get_protocol': {
         const protocol = String(args.protocol ?? '');
-        const result = await backend.getProtocol(protocol);
-        return {
+        const metrics = await backend.getProtocol(protocol);
+        result = {
           data: {
-            name: result.name,
-            tvl: result.totalValueLockedUSD,
-            volume: result.totalVolumeUSD,
-            transactionCount: result.txCount,
+            name: metrics.name,
+            tvl: metrics.totalValueLockedUSD,
+            volume: metrics.totalVolumeUSD,
+            transactionCount: metrics.txCount,
           },
           isError: false,
         };
+        break;
       }
 
       case 'compare_multiple_protocols': {
         const protocols = args.protocols as string[];
-        const result = await backend.compareMultipleProtocols(protocols);
-        return { data: result, isError: false };
+        const comparison = await backend.compareMultipleProtocols(protocols);
+        result = { data: comparison, isError: false };
+        break;
       }
 
       case 'market_summary': {
         const summary = await backend.getMarketSummary();
-        return { data: summary, isError: false };
+        result = { data: summary, isError: false };
+        break;
       }
 
       case 'wallet_balance': {
         const balance = await backend.getBalance();
-        return { data: balance, isError: false };
+        result = { data: balance, isError: false };
+        break;
       }
 
       case 'transfer_hbar': {
         const recipient = String(args.recipient ?? '');
         const amount = Number(args.amount);
-        const result = await backend.transferHBAR(recipient, amount);
-        return {
+        const transfer = await backend.transferHBAR(recipient, amount);
+        result = {
           data: {
-            transactionHash: result.transactionId,
-            status: result.status,
+            transactionHash: transfer.transactionId,
+            status: transfer.status,
           },
           isError: false,
         };
+        break;
       }
 
       case 'purchase_research': {
-        const result = await backend.purchaseResearch({
+        const research = await backend.purchaseResearch({
           protocolA: String(args.protocolA ?? ''),
           protocolB: String(args.protocolB ?? ''),
           amount: Number(args.amount),
           recipient: args.recipient ? String(args.recipient) : undefined,
+          paymentAlreadySettled: options.paymentAlreadySettled,
+          paymentTxId: options.paymentTxId,
+          paymentStatus: options.paymentStatus,
         });
-        return {
+        result = {
           data: {
-            report: result.report,
-            payment: result.payment,
+            report: research.report,
+            payment: research.payment,
           },
           isError: false,
         };
+        break;
       }
 
       default:
-        return { data: { error: `Unknown tool: ${name}` }, isError: true };
+        result = { data: { error: `Unknown tool: ${name}` }, isError: true };
     }
   } catch (error) {
-    return {
+    result = {
       data: {
         error: error instanceof Error ? error.message : 'Tool execution failed',
       },
       isError: true,
     };
+  }
+
+  return attachReceipt(backend, name, args, result, options);
+}
+
+export async function attachReceiptToResult(
+  name: McpToolName,
+  args: Record<string, unknown>,
+  result: McpToolResult,
+  options: ExecuteMcpToolOptions,
+): Promise<McpToolResultWithReceipt> {
+  const backend = await getBackend();
+  return attachReceipt(backend, name, args, result, options);
+}
+
+async function attachReceipt(
+  backend: BackendModules,
+  name: McpToolName,
+  args: Record<string, unknown>,
+  result: McpToolResult,
+  options: ExecuteMcpToolOptions,
+): Promise<McpToolResultWithReceipt> {
+  if (result.isError || !options.paymentTxId) {
+    return result;
+  }
+
+  try {
+    const resultHash = backend.hashResult(result.data);
+    const hcsTxId = await backend.logReceiptToHCS({
+      tool: name,
+      paymentTxId: options.paymentTxId,
+      payer: options.payer,
+      args,
+      resultHash,
+    });
+    return {
+      ...result,
+      receipt: { hcsTxId, resultHash },
+    };
+  } catch (error) {
+    console.error('HCS receipt logging failed:', error);
+    return result;
   }
 }

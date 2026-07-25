@@ -1,3 +1,4 @@
+import { runDashboardMcpTool } from '@/app/actions/mcp-actions';
 import type { McpToolName } from '@/lib/mcp-definitions';
 
 interface McpResponse<T> {
@@ -15,30 +16,29 @@ function extractError(data: unknown): string {
   return 'Tool execution failed';
 }
 
-async function fetchJson<T>(url: string, init?: RequestInit): Promise<McpResponse<T>> {
-  const res = await fetch(url, init);
-  const body = (await res.json()) as McpResponse<T> & { error?: string };
-
-  if (!res.ok) {
-    throw new Error(body.error ?? extractError(body.data) ?? 'Request failed');
-  }
+/** Dashboard MCP calls — server actions bypass the public x402 gate. */
+async function callMcpTool<T>(
+  tool: McpToolName,
+  args: Record<string, unknown> = {},
+): Promise<McpResponse<T>> {
+  const body = await runDashboardMcpTool(tool, args);
 
   if (body.isError) {
     throw new Error(extractError(body.data));
   }
 
-  return body;
+  return body as McpResponse<T>;
 }
 
-export async function callMcpTool<T>(
-  tool: McpToolName,
-  args: Record<string, unknown> = {},
-): Promise<{ data: T; executionTimeMs: number; isError: boolean }> {
-  return fetchJson<T>('/api/mcp', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ tool, args }),
-  });
+export async function fetchPublicMcpInfo() {
+  const res = await fetch('/api/mcp', { cache: 'no-store' });
+  if (!res.ok) throw new Error('Failed to load MCP info');
+  return res.json() as Promise<{
+    tools: string[];
+    x402: boolean;
+    facilitator: string | null;
+    payTo: string | null;
+  }>;
 }
 
 export const api = {
@@ -65,4 +65,5 @@ export const api = {
       amount,
       ...(recipient ? { recipient } : {}),
     }),
+  runTool: callMcpTool,
 };

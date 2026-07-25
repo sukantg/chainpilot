@@ -45,11 +45,16 @@ Open [http://localhost:3000](http://localhost:3000).
 ## Architecture
 
 ```
-frontend/src/app/api/mcp/route.ts   →  POST /api/mcp
-frontend/src/server/mcp-tools.ts    →  Wraps existing backend modules
-../graph/*                          →  The Graph live metrics
-../hedera/*                         →  Hedera Testnet wallet
-../src/purchase-research.ts         →  Paid research reports
+Dashboard pages  →  Server Actions (runDashboardMcpTool)  →  executeMcpTool
+External agents  →  POST /api/mcp  →  x402 gate (when enabled)  →  executeMcpTool
+```
+
+```
+frontend/src/app/actions/mcp-actions.ts  →  Dashboard MCP (no x402)
+frontend/src/app/api/mcp/route.ts        →  Public API + x402
+frontend/src/server/mcp-tools.ts         →  Shared tool execution
+../graph/*                               →  The Graph live metrics
+../hedera/*                              →  Hedera Testnet wallet + HCS
 ```
 
 The Developer Console exposes the same tool surface as the MCP server:
@@ -89,6 +94,8 @@ npm start
 - All blockchain data is **live** — no mocked responses
 - Credentials are loaded from `../.env` locally, or from Vercel Environment Variables in production
 - The MCP server in `src/index.ts` is **not modified** by this frontend
+- **Dashboard bypasses x402** via server actions so UI pages keep working when x402 is enabled
+- **External agents** must pay via x402 on `POST /api/mcp` when `FACILITATOR_URL` + `X402_PAY_TO` are set
 
 ## Deploy to Vercel
 
@@ -113,9 +120,14 @@ In Vercel → Project → Settings → Environment Variables, add:
 | `THE_GRAPH_API_KEY` | Yes |
 | `HEDERA_ACCOUNT_ID` | Yes |
 | `HEDERA_PRIVATE_KEY` | Yes |
-| `RESEARCH_PAYMENT_RECIPIENT` | For research purchases |
+| `RESEARCH_PAYMENT_RECIPIENT` | For research purchases (dashboard) |
 | `RESEARCH_PRICE_HBAR` | Optional (default: 1) |
 | `HEDERA_PRIVATE_KEY_TYPE` | Optional (`ecdsa` / `ed25519` / `der`) |
+| `FACILITATOR_URL` | For x402 on public API |
+| `X402_PAY_TO` | For x402 on public API |
+| `HCS_RECEIPT_TOPIC_ID` | Optional HCS receipts |
+
+Deploy the facilitator separately (Railway/Render) — do not put `FACILITATOR_PRIVATE_KEY` on Vercel.
 
 Use **Testnet** credentials only for demos.
 

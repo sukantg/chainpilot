@@ -7,19 +7,30 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label, Select } from '@/components/ui/input';
 import { MCP_TOOL_DEFINITIONS, MCP_TOOL_NAMES, type McpToolName } from '@/lib/mcp-definitions';
+import { getToolPriceHbar, isPaidTool } from '@/lib/mcp-pricing';
+import { api, fetchPublicMcpInfo } from '@/lib/api';
 import { ArrowDown, Play, Terminal } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 export default function DeveloperPage() {
   const [tool, setTool] = useState<McpToolName>('list_protocols');
-  const [argsJson, setArgsJson] = useState(JSON.stringify(MCP_TOOL_DEFINITIONS.list_protocols.exampleArgs, null, 2));
+  const [argsJson, setArgsJson] = useState(
+    JSON.stringify(MCP_TOOL_DEFINITIONS.list_protocols.exampleArgs, null, 2),
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [x402Enabled, setX402Enabled] = useState(false);
   const [response, setResponse] = useState<{
     data: unknown;
     executionTimeMs: number;
     isError: boolean;
   } | null>(null);
+
+  useEffect(() => {
+    void fetchPublicMcpInfo()
+      .then((info) => setX402Enabled(info.x402))
+      .catch(() => setX402Enabled(false));
+  }, []);
 
   function onToolChange(next: McpToolName) {
     setTool(next);
@@ -33,20 +44,16 @@ export default function DeveloperPage() {
     setError(null);
     try {
       const args = JSON.parse(argsJson) as Record<string, unknown>;
-      const res = await fetch('/api/mcp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tool, args }),
-      });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error ?? 'Request failed');
-      setResponse(body);
+      const res = await api.runTool(tool, args);
+      setResponse(res);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Execution failed');
     } finally {
       setLoading(false);
     }
   }
+
+  const priceHbar = getToolPriceHbar(tool);
 
   return (
     <>
@@ -55,6 +62,18 @@ export default function DeveloperPage() {
         description="Execute any ChainPilot MCP tool and inspect live request/response payloads."
         badge="MCP Tools"
       />
+
+      {x402Enabled && (
+        <Card className="mb-6 border-accent/30 bg-accent/5">
+          <CardContent className="pt-6 text-sm text-muted">
+            <strong className="text-foreground">x402 is enabled.</strong> External agents calling{' '}
+            <code className="rounded bg-white/10 px-1">POST /api/mcp</code> must pay for premium
+            tools. This console runs tools directly on the server so the dashboard keeps working.
+            Use <code className="rounded bg-white/10 px-1">npm run agent:buy</code> to test the
+            public x402 API.
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="mb-6">
         <CardHeader>
@@ -66,12 +85,24 @@ export default function DeveloperPage() {
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="tool-select">Tool</Label>
-            <Select id="tool-select" value={tool} onChange={(e) => onToolChange(e.target.value as McpToolName)}>
+            <Select
+              id="tool-select"
+              value={tool}
+              onChange={(e) => onToolChange(e.target.value as McpToolName)}
+            >
               {MCP_TOOL_NAMES.map((name) => (
-                <option key={name} value={name}>{name}</option>
+                <option key={name} value={name}>
+                  {name}
+                  {isPaidTool(name) ? ` (${getToolPriceHbar(name)} ℏ via API)` : ''}
+                </option>
               ))}
             </Select>
-            <p className="text-xs text-muted">{MCP_TOOL_DEFINITIONS[tool].description}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-xs text-muted">{MCP_TOOL_DEFINITIONS[tool].description}</p>
+              {priceHbar !== undefined && (
+                <Badge variant="accent">{priceHbar} ℏ on public API</Badge>
+              )}
+            </div>
           </div>
 
           <div className="space-y-2">
