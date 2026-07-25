@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "chainpilot": {
+      "command": "npx",
+      "args": ["tsx", "src/index.ts"],
+      "cwd": "/Users/zuki-g/Downloads/Code/chainpilot"
+    }
+  }
+}
