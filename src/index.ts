@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import * as z from 'zod/v4';
-import { compareProtocols, getMarketSummary } from '../graph/compare.js';
+import { compareMultipleProtocols, getMarketSummary } from '../graph/compare.js';
 import { getProtocol } from '../graph/client.js';
 import { listProtocols } from '../graph/config.js';
 import { getBalance, transferHBAR } from '../hedera/client.js';
@@ -109,25 +109,39 @@ function createServer(): McpServer {
   );
 
   server.registerTool(
-    'compare_protocols',
+    'compare_multiple_protocols',
     {
-      description: 'Compare two DeFi protocols by TVL, volume, and transaction count',
+      description: 'Compare multiple DeFi protocols by TVL, volume, and transaction count',
       inputSchema: z.object({
-        protocolA: z.string().describe('First protocol name, e.g. uniswap'),
-        protocolB: z.string().describe('Second protocol name, e.g. aave'),
+        protocols: z
+          .array(z.string())
+          .min(2)
+          .describe('Protocol names to compare, e.g. ["uniswap", "aave", "curve"]'),
       }),
     },
-    async ({ protocolA, protocolB }) => {
-      const result = await compareProtocols(protocolA, protocolB);
+    async ({ protocols }) => {
+      try {
+        const result = await compareMultipleProtocols(protocols);
 
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(result, null, 2),
-          },
-        ],
-      };
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+        };
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : 'Failed to compare protocols';
+
+        return {
+          content: [{ type: 'text', text: message }],
+          isError: true,
+        };
+      }
     },
   );
 

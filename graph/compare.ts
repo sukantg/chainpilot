@@ -45,6 +45,18 @@ export interface MarketSummary {
   overallStrongestProtocol: Pick<Protocol, 'id' | 'name'>;
 }
 
+export interface MultipleProtocolComparison {
+  protocols: Array<
+    Pick<Protocol, 'name' | 'totalValueLockedUSD' | 'totalVolumeUSD' | 'txCount'>
+  >;
+  leaders: {
+    tvl: string;
+    volume: string;
+    transactions: string;
+  };
+  recommendation: string;
+}
+
 const METRIC_LABELS = {
   totalValueLockedUSD: 'TVL',
   totalVolumeUSD: 'volume',
@@ -159,6 +171,84 @@ function buildRecommendation(
   }
 
   return `Metrics are mixed: ${nameA} leads on ${winsA.join(', ')} while ${nameB} leads on ${winsB.join(', ')}. Prefer ${nameA} where ${winsA[0]} matters most and ${nameB} where ${winsB[0]} matters most.`;
+}
+
+function validateComparisonProtocols(protocolNames: string[]): string[] {
+  if (protocolNames.length < 2) {
+    throw new Error('At least 2 protocols are required for comparison.');
+  }
+
+  const unsupported = protocolNames.filter((name) => !isSupportedProtocol(name));
+  if (unsupported.length > 0) {
+    throw new Error(
+      `Unsupported protocol(s): ${unsupported.join(', ')}. Supported protocols: ${getSupportedProtocols().join(', ')}`,
+    );
+  }
+
+  const normalized = [
+    ...new Set(protocolNames.map((name) => name.toLowerCase().trim())),
+  ];
+
+  if (normalized.length < 2) {
+    throw new Error('At least 2 unique protocols are required for comparison.');
+  }
+
+  return normalized;
+}
+
+function buildMultiProtocolRecommendation(protocols: Protocol[]): string {
+  const strongest = determineOverallStrongest(protocols);
+  const winsByProtocol = new Map<string, string[]>();
+
+  for (const protocol of protocols) {
+    winsByProtocol.set(protocol.name, []);
+  }
+
+  for (const [metric, label] of Object.entries(METRIC_LABELS)) {
+    const leader = getMetricHighlight(protocols, metric as MetricKey);
+    winsByProtocol.get(leader.name)?.push(label);
+  }
+
+  const wins = winsByProtocol.get(strongest.name) ?? [];
+  const metricCount = Object.keys(METRIC_LABELS).length;
+
+  if (wins.length === metricCount) {
+    return `${strongest.name} is the strongest overall choice: it leads on ${wins.join(', ')}. Prefer ${strongest.name} for broader on-chain activity and liquidity depth.`;
+  }
+
+  if (wins.length > 1) {
+    return `${strongest.name} is the strongest overall choice: it leads on ${wins.join(', ')}. Prefer ${strongest.name} for broader on-chain activity and liquidity depth.`;
+  }
+
+  if (wins.length === 1) {
+    return `${strongest.name} is the strongest overall choice: it leads on ${wins[0]}. Metrics are mixed across protocols; prefer ${strongest.name} where ${wins[0]} matters most.`;
+  }
+
+  return `${strongest.name} is the strongest overall choice based on TVL tiebreak. Protocols are evenly matched across TVL, volume, and transaction count.`;
+}
+
+export async function compareMultipleProtocols(
+  protocolNames: string[],
+): Promise<MultipleProtocolComparison> {
+  const normalized = validateComparisonProtocols(protocolNames);
+  const protocols = await Promise.all(normalized.map((id) => getProtocol(id)));
+
+  return {
+    protocols: protocols.map(
+      ({ name, totalValueLockedUSD, totalVolumeUSD, txCount }) => ({
+        name,
+        totalValueLockedUSD,
+        totalVolumeUSD,
+        txCount,
+      }),
+    ),
+    leaders: {
+      tvl: getMetricHighlight(protocols, 'totalValueLockedUSD').name,
+      volume: getMetricHighlight(protocols, 'totalVolumeUSD').name,
+      transactions: getMetricHighlight(protocols, 'txCount').name,
+    },
+    recommendation: buildMultiProtocolRecommendation(protocols),
+  };
 }
 
 export async function getMarketSummary(): Promise<MarketSummary> {
