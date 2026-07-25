@@ -2,7 +2,7 @@
 
 import { MCP_TOOL_NAMES, type McpToolName } from '@/lib/mcp-definitions';
 import { executeMcpTool } from '@/server/mcp-tools';
-import { isX402Enabled } from '@/server/x402-server';
+import { isX402Enabled } from '@/server/x402-config';
 
 export interface DashboardMcpResponse {
   data: unknown;
@@ -25,14 +25,25 @@ export async function runDashboardMcpTool(
     };
   }
 
-  const start = performance.now();
-  const result = await executeMcpTool(tool, args);
-  return {
-    data: result.data,
-    isError: result.isError,
-    executionTimeMs: Math.round(performance.now() - start),
-    tool,
-  };
+  try {
+    const start = performance.now();
+    const result = await executeMcpTool(tool, args);
+    return {
+      data: result.data,
+      isError: result.isError,
+      executionTimeMs: Math.round(performance.now() - start),
+      tool,
+    };
+  } catch (error) {
+    return {
+      data: {
+        error: error instanceof Error ? error.message : 'Tool execution failed',
+      },
+      isError: true,
+      executionTimeMs: 0,
+      tool,
+    };
+  }
 }
 
 export async function getMcpInfo() {

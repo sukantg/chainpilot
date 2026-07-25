@@ -1,9 +1,12 @@
 import type { NextConfig } from 'next';
 
+const backendBundle = './src/server/chainpilot-backend/**/*';
+
 const nextConfig: NextConfig = {
   serverExternalPackages: ['@hashgraph/sdk', '@hiero-ledger/sdk', '@x402/core', '@x402/hedera'],
   outputFileTracingIncludes: {
-    '/api/mcp': ['./src/server/chainpilot-backend/**/*'],
+    '/*': [backendBundle],
+    '/api/mcp': [backendBundle],
   },
 };
 

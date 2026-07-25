@@ -54,7 +54,7 @@ export default function ComparePage() {
     <>
       <Header
         title="Compare Protocols"
-        description="Head-to-head live metrics comparison powered by compare_multiple_protocols MCP tool."
+        description="Head-to-head live metrics comparison across two DeFi protocols."
         badge="Live Comparison"
       />
 

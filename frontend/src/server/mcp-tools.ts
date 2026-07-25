@@ -48,31 +48,43 @@ interface BackendModules {
 let backendPromise: Promise<BackendModules> | null = null;
 
 async function loadBackend(): Promise<BackendModules> {
-  const dist = resolveBackendDist(import.meta.url);
+  let dist: string;
+  try {
+    dist = resolveBackendDist(import.meta.url);
+  } catch (error) {
+    backendPromise = null;
+    throw error;
+  }
 
   const importFromDist = (modulePath: string) =>
     import(/* webpackIgnore: true */ pathToFileURL(path.join(dist, modulePath)).href);
 
-  const [compare, client, config, hedera, research, hcs] = await Promise.all([
-    importFromDist('graph/compare.js'),
-    importFromDist('graph/client.js'),
-    importFromDist('graph/config.js'),
-    importFromDist('hedera/client.js'),
-    importFromDist('src/purchase-research.js'),
-    importFromDist('hedera/hcs.js'),
-  ]);
+  try {
+    const [compare, client, config, hedera, research, hcs] = await Promise.all([
+      importFromDist('graph/compare.js'),
+      importFromDist('graph/client.js'),
+      importFromDist('graph/config.js'),
+      importFromDist('hedera/client.js'),
+      importFromDist('src/purchase-research.js'),
+      importFromDist('hedera/hcs.js'),
+    ]);
 
-  return {
-    compareMultipleProtocols: compare.compareMultipleProtocols,
-    getMarketSummary: compare.getMarketSummary,
-    getProtocol: client.getProtocol,
-    listProtocols: config.listProtocols,
-    getBalance: hedera.getBalance,
-    transferHBAR: hedera.transferHBAR,
-    purchaseResearch: research.purchaseResearch,
-    hashResult: hcs.hashResult,
-    logReceiptToHCS: hcs.logReceiptToHCS,
-  };
+    return {
+      compareMultipleProtocols: compare.compareMultipleProtocols,
+      getMarketSummary: compare.getMarketSummary,
+      getProtocol: client.getProtocol,
+      listProtocols: config.listProtocols,
+      getBalance: hedera.getBalance,
+      transferHBAR: hedera.transferHBAR,
+      purchaseResearch: research.purchaseResearch,
+      hashResult: hcs.hashResult,
+      logReceiptToHCS: hcs.logReceiptToHCS,
+    };
+  } catch (error) {
+    backendPromise = null;
+    const message = error instanceof Error ? error.message : 'Unknown backend import error';
+    throw new Error(`Failed to load ChainPilot backend from ${dist}: ${message}`);
+  }
 }
 
 function getBackend(): Promise<BackendModules> {

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { attachReceiptToResult, executeMcpTool } from '@/server/mcp-tools';
+import { isX402Enabled } from '@/server/x402-config';
 import {
-  isX402Enabled,
   settleMcpPayment,
   verifyMcpPayment,
 } from '@/server/x402-server';

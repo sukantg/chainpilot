@@ -1,15 +1,17 @@
 'use client';
 
 import { Header } from '@/components/layout/header';
+import { McpToolCatalog } from '@/components/shared/mcp-tool-catalog';
+import { McpToolPricingBadge } from '@/components/shared/mcp-tool-pricing-badge';
 import { ErrorState } from '@/components/shared/states';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Label, Select } from '@/components/ui/input';
-import { MCP_TOOL_DEFINITIONS, MCP_TOOL_NAMES, type McpToolName } from '@/lib/mcp-definitions';
-import { getToolPriceHbar, isPaidTool } from '@/lib/mcp-pricing';
+import { Label } from '@/components/ui/input';
+import { MCP_TOOL_DEFINITIONS, type McpToolName } from '@/lib/mcp-definitions';
+import { getToolTier } from '@/lib/mcp-pricing';
 import { api, fetchPublicMcpInfo } from '@/lib/api';
-import { ArrowDown, Play, Terminal } from 'lucide-react';
+import { ArrowDown, Coins, Play, Sparkles, Terminal } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 export default function DeveloperPage() {
@@ -20,6 +22,7 @@ export default function DeveloperPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [x402Enabled, setX402Enabled] = useState(false);
+  const [toolFilter, setToolFilter] = useState<'all' | 'free' | 'paid'>('all');
   const [response, setResponse] = useState<{
     data: unknown;
     executionTimeMs: number;
@@ -53,13 +56,13 @@ export default function DeveloperPage() {
     }
   }
 
-  const priceHbar = getToolPriceHbar(tool);
+  const selectedTier = getToolTier(tool);
 
   return (
     <>
       <Header
         title="Developer Console"
-        description="Execute any ChainPilot MCP tool and inspect live request/response payloads."
+        description="Execute ChainPilot MCP tools and inspect live request/response payloads."
         badge="MCP Tools"
       />
 
@@ -75,6 +78,46 @@ export default function DeveloperPage() {
         </Card>
       )}
 
+      <div className="mb-6 flex flex-wrap gap-2">
+        {(['all', 'free', 'paid'] as const).map((filter) => (
+          <Button
+            key={filter}
+            variant={toolFilter === filter ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setToolFilter(filter)}
+          >
+            {filter === 'all' && 'All tools'}
+            {filter === 'free' && (
+              <>
+                <Sparkles className="h-4 w-4" />
+                Free only
+              </>
+            )}
+            {filter === 'paid' && (
+              <>
+                <Coins className="h-4 w-4" />
+                Paid only
+              </>
+            )}
+          </Button>
+        ))}
+      </div>
+
+      {toolFilter === 'all' ? (
+        <div className="mb-6">
+          <McpToolCatalog onSelect={onToolChange} selectedTool={tool} developerMode />
+        </div>
+      ) : (
+        <div className="mb-6">
+          <McpToolCatalog
+            onSelect={onToolChange}
+            selectedTool={tool}
+            tier={toolFilter}
+            developerMode
+          />
+        </div>
+      )}
+
       <Card className="mb-6">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
@@ -84,25 +127,17 @@ export default function DeveloperPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="tool-select">Tool</Label>
-            <Select
-              id="tool-select"
-              value={tool}
-              onChange={(e) => onToolChange(e.target.value as McpToolName)}
-            >
-              {MCP_TOOL_NAMES.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                  {isPaidTool(name) ? ` (${getToolPriceHbar(name)} ℏ via API)` : ''}
-                </option>
-              ))}
-            </Select>
             <div className="flex flex-wrap items-center gap-2">
-              <p className="text-xs text-muted">{MCP_TOOL_DEFINITIONS[tool].description}</p>
-              {priceHbar !== undefined && (
-                <Badge variant="accent">{priceHbar} ℏ on public API</Badge>
-              )}
+              <Label>Selected tool</Label>
+              <Badge
+                variant={selectedTier === 'paid' ? 'accent' : 'success'}
+                className="font-mono"
+              >
+                {tool}
+              </Badge>
+              <McpToolPricingBadge tool={tool} developerMode />
             </div>
+            <p className="text-xs text-muted">{MCP_TOOL_DEFINITIONS[tool].description}</p>
           </div>
 
           <div className="space-y-2">

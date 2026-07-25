@@ -65,7 +65,7 @@ export default function WalletPage() {
     <>
       <Header
         title="Wallet"
-        description="Hedera Testnet wallet — live balance and HBAR transfers via MCP."
+        description="Hedera Testnet wallet — live balance and HBAR transfers."
         badge="Hedera Payments"
       />
 

@@ -19,3 +19,18 @@ export function formatCount(value: string | number): string {
   if (Number.isNaN(num)) return String(value);
   return num.toLocaleString('en-US');
 }
+
+/** Parse raw on-chain metric strings into finite numbers for charts. */
+export function parseMetricValue(value: string | number | undefined): number {
+  if (value === undefined || value === null || value === '') return 0;
+  const num = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(num) && num > 0 ? num : 0;
+}
+
+export function shouldUseLogScale(values: number[]): boolean {
+  const positive = values.filter((value) => value > 0);
+  if (positive.length < 2) return false;
+  const max = Math.max(...positive);
+  const min = Math.min(...positive);
+  return max / min >= 50;
+}

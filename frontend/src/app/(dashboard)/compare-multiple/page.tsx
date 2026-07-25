@@ -1,6 +1,6 @@
 'use client';
 
-import { ProtocolComparisonChart, toChartData } from '@/components/charts/comparison-charts';
+import { getProtocolColor, ProtocolComparisonChart, toChartData } from '@/components/charts/comparison-charts';
 import { Header } from '@/components/layout/header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -85,7 +85,12 @@ export default function CompareMultiplePage() {
                       ? 'border-primary/40 bg-primary/15 text-blue-200'
                       : 'border-white/10 bg-white/5 text-muted hover:border-white/20',
                   )}
+                  style={active ? { borderColor: `${getProtocolColor(p.name)}66` } : undefined}
                 >
+                  <span
+                    className="h-2.5 w-2.5 rounded-full"
+                    style={{ backgroundColor: getProtocolColor(p.name) }}
+                  />
                   {active && <Check className="h-4 w-4" />}
                   {p.name}
                 </button>

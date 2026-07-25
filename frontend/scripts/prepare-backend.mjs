@@ -1,4 +1,4 @@
-import { cpSync, existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execSync } from 'node:child_process';
@@ -15,7 +15,17 @@ function run(command, cwd) {
 
 function removeDir(dir) {
   if (!existsSync(dir)) return;
-  rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+
+  const trash = `${dir}-trash-${Date.now()}`;
+  try {
+    renameSync(dir, trash);
+    rmSync(trash, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    return;
+  } catch {
+    // Fall through to shell removal below.
+  }
+
+  run(`rm -rf "${dir}"`, frontendRoot);
 }
 
 console.log('Preparing ChainPilot backend for deployment...');

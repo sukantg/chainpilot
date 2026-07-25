@@ -1,6 +1,6 @@
 'use client';
 
-import { toChartData } from '@/components/charts/comparison-charts';
+import { RankingBarChart } from '@/components/charts/comparison-charts';
 import { Header } from '@/components/layout/header';
 import { KpiCard } from '@/components/shared/kpi-card';
 import { ErrorState } from '@/components/shared/states';
@@ -8,16 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PageLoader } from '@/components/ui/skeleton';
 import { api } from '@/lib/api';
-import { formatUsd } from '@/lib/utils';
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
+import { formatCount, formatUsd } from '@/lib/utils';
 import { Activity, BarChart3, Crown, DollarSign, TrendingUp } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -58,15 +49,6 @@ export default function MarketPage() {
   if (loading) return <PageLoader />;
   if (error || !summary) return <ErrorState message={error ?? 'No data'} onRetry={load} />;
 
-  const tvlChart = toChartData(
-    summary.rankingByTvl.map((r) => ({
-      name: r.name,
-      totalValueLockedUSD: r.value,
-      totalVolumeUSD: '0',
-      txCount: '0',
-    })),
-  );
-
   return (
     <>
       <Header
@@ -77,31 +59,46 @@ export default function MarketPage() {
 
       <div className="mb-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <KpiCard label="Protocols Analyzed" value={String(summary.protocolsAnalyzed)} icon={TrendingUp} />
-        <KpiCard label="Top TVL" value={summary.highestTvl.name} icon={DollarSign} subtitle={formatUsd(summary.highestTvl.value)} />
-        <KpiCard label="Top Volume" value={summary.highestVolume.name} icon={BarChart3} accent="secondary" subtitle={formatUsd(summary.highestVolume.value)} />
-        <KpiCard label="Strongest Overall" value={summary.overallStrongestProtocol.name} icon={Crown} accent="accent" />
+        <KpiCard
+          label="Top TVL"
+          value={summary.highestTvl.name}
+          icon={DollarSign}
+          subtitle={formatUsd(summary.highestTvl.value)}
+        />
+        <KpiCard
+          label="Top Volume"
+          value={summary.highestVolume.name}
+          icon={BarChart3}
+          accent="secondary"
+          subtitle={formatUsd(summary.highestVolume.value)}
+        />
+        <KpiCard
+          label="Strongest Overall"
+          value={summary.overallStrongestProtocol.name}
+          icon={Crown}
+          accent="accent"
+        />
       </div>
 
       <div className="mb-8 grid gap-6 lg:grid-cols-3">
         <RankingCard title="TVL Rankings" rows={summary.rankingByTvl} format={formatUsd} />
         <RankingCard title="Volume Rankings" rows={summary.rankingByVolume} format={formatUsd} />
-        <RankingCard title="Transaction Rankings" rows={summary.rankingByTransactions} format={(v) => Number(v).toLocaleString()} />
+        <RankingCard
+          title="Transaction Rankings"
+          rows={summary.rankingByTransactions}
+          format={(v) => formatCount(v)}
+        />
       </div>
 
-      <Card>
-        <CardHeader><CardTitle>TVL Market Rankings</CardTitle></CardHeader>
-        <CardContent className="h-80">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={tvlChart}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-              <XAxis dataKey="name" stroke="#71717a" />
-              <YAxis stroke="#71717a" tickFormatter={(v) => `$${(v / 1e9).toFixed(0)}B`} />
-              <Tooltip contentStyle={{ background: '#0f111a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12 }} />
-              <Bar dataKey="tvl" fill="#3b82f6" radius={[8, 8, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </CardContent>
-      </Card>
+      <div className="grid gap-6 lg:grid-cols-3">
+        <RankingBarChart title="TVL Rankings" rows={summary.rankingByTvl} valueFormatter={formatUsd} />
+        <RankingBarChart title="Volume Rankings" rows={summary.rankingByVolume} valueFormatter={formatUsd} />
+        <RankingBarChart
+          title="Transaction Rankings"
+          rows={summary.rankingByTransactions}
+          valueFormatter={formatCount}
+        />
+      </div>
     </>
   );
 }

@@ -11,6 +11,17 @@ export const MCP_TOOL_NAMES = [
 
 export type McpToolName = (typeof MCP_TOOL_NAMES)[number];
 
+export const MCP_TOOL_LABELS: Record<McpToolName, string> = {
+  hello: 'Health check',
+  list_protocols: 'Browse protocols',
+  get_protocol: 'Protocol metrics',
+  compare_multiple_protocols: 'Compare protocols',
+  market_summary: 'Market overview',
+  wallet_balance: 'Wallet balance',
+  transfer_hbar: 'Send HBAR',
+  purchase_research: 'Research reports',
+};
+
 export const MCP_TOOL_DEFINITIONS: Record<
   McpToolName,
   { description: string; exampleArgs: Record<string, unknown> }

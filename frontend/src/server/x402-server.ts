@@ -15,12 +15,11 @@ import {
   isPaidTool,
 } from '@/lib/mcp-pricing';
 import { NextRequestAdapter } from './next-request-adapter';
+import { isX402Enabled } from './x402-config';
+
+export { isX402Enabled };
 
 let httpServerPromise: Promise<x402HTTPResourceServer> | null = null;
-
-export function isX402Enabled(): boolean {
-  return Boolean(process.env.FACILITATOR_URL && process.env.X402_PAY_TO);
-}
 
 function getPayTo(): string {
   const payTo = process.env.X402_PAY_TO;
