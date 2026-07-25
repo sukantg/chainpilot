@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "predev": "cd .. && npm run build",
-    "prebuild": "cd .. && npm run build",
+    "build:backend": "node scripts/prepare-backend.mjs",
+    "predev": "npm run build:backend",
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/prepare-backend.mjs && next build",
     "start": "next start",
     "lint": "eslint"
   },

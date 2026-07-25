@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { executeMcpTool } from '@/server/mcp-tools';
 import { MCP_TOOL_NAMES, type McpToolName } from '@/lib/mcp-definitions';
 
+export const maxDuration = 60;
+
 export async function POST(request: Request) {
   const start = performance.now();
   const body = await request.json();

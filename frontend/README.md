@@ -87,5 +87,65 @@ npm start
 ## Notes
 
 - All blockchain data is **live** — no mocked responses
-- Credentials are loaded from `../.env` automatically
+- Credentials are loaded from `../.env` locally, or from Vercel Environment Variables in production
 - The MCP server in `src/index.ts` is **not modified** by this frontend
+
+## Deploy to Vercel
+
+### 1. Push to GitHub
+
+Ensure the full repo is pushed (both root backend and `frontend/`).
+
+### 2. Import project in Vercel
+
+1. Go to [vercel.com/new](https://vercel.com/new)
+2. Import your GitHub repository
+3. Set **Root Directory** to `frontend`
+4. Framework Preset: **Next.js** (auto-detected)
+5. Build Command: `npm run build` (default — installs root deps via `vercel.json`, compiles backend, then Next.js)
+
+### 3. Add environment variables
+
+In Vercel → Project → Settings → Environment Variables, add:
+
+| Variable | Required |
+|----------|----------|
+| `THE_GRAPH_API_KEY` | Yes |
+| `HEDERA_ACCOUNT_ID` | Yes |
+| `HEDERA_PRIVATE_KEY` | Yes |
+| `RESEARCH_PAYMENT_RECIPIENT` | For research purchases |
+| `RESEARCH_PRICE_HBAR` | Optional (default: 1) |
+| `HEDERA_PRIVATE_KEY_TYPE` | Optional (`ecdsa` / `ed25519` / `der`) |
+
+Use **Testnet** credentials only for demos.
+
+### 4. Deploy
+
+Click Deploy. The build will:
+
+1. Install root backend dependencies
+2. Compile `graph/`, `hedera/`, `src/` → `dist/`
+3. Copy `dist/` into `frontend/backend-dist/` (bundled with serverless functions)
+4. Build the Next.js app
+
+### Vercel plan notes
+
+- **Hobby**: Serverless functions timeout at **10 seconds**. Slow tools (`market_summary`, `compare_multiple_protocols`) may fail when The Graph is slow.
+- **Pro**: Supports up to **60 seconds** (`maxDuration` is configured). Recommended for hackathon demos with live data.
+
+### Troubleshooting
+
+| Error | Fix |
+|-------|-----|
+| `ChainPilot backend not found` | Ensure `npm run build` runs (not a custom command that skips backend prep) |
+| `Missing THE_GRAPH_API_KEY` | Add env vars in Vercel dashboard |
+| Function timeout | Upgrade to Pro or cache/warm endpoints |
+| `@hashgraph/sdk` errors | Already listed in `serverExternalPackages` |
+
+### Local vs Vercel
+
+| | Local | Vercel |
+|---|-------|--------|
+| Backend path | `../dist` or `backend-dist` | `backend-dist` (copied at build) |
+| Env vars | `../.env` | Vercel Environment Variables |
+| MCP server | Run separately via stdio | Not needed — API routes call same logic |

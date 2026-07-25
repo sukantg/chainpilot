@@ -6,6 +6,9 @@ const nextConfig: NextConfig = {
     root: path.join(__dirname),
   },
   serverExternalPackages: ['@hashgraph/sdk'],
+  outputFileTracingIncludes: {
+    '/api/mcp': ['./backend-dist/**/*'],
+  },
 };
 
 export default nextConfig;

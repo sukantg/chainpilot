@@ -1,6 +1,7 @@
 import path from 'path';
 import { pathToFileURL } from 'url';
 import { loadBackendEnv } from './env';
+import { resolveBackendDist } from './backend-path';
 import type { McpToolName } from '@/lib/mcp-definitions';
 
 loadBackendEnv();
@@ -36,8 +37,7 @@ interface BackendModules {
 let backendPromise: Promise<BackendModules> | null = null;
 
 async function loadBackend(): Promise<BackendModules> {
-  const root = path.join(process.cwd(), '..');
-  const dist = path.join(root, 'dist');
+  const dist = resolveBackendDist();
 
   const importFromDist = (modulePath: string) =>
     import(/* webpackIgnore: true */ pathToFileURL(path.join(dist, modulePath)).href);
