@@ -10,17 +10,14 @@ function isBackendDist(dir: string): boolean {
 export function resolveBackendDist(moduleUrl?: string): string {
   const candidates: string[] = [
     path.join(process.cwd(), 'src/server/chainpilot-backend'),
-    path.join(process.cwd(), 'backend-dist'),
-    path.join(process.cwd(), 'frontend', 'backend-dist'),
-    path.join(process.cwd(), '..', 'dist'),
+    path.join(process.cwd(), 'frontend/src/server/chainpilot-backend'),
   ];
 
   if (moduleUrl) {
     const here = path.dirname(fileURLToPath(moduleUrl));
-    // Walk up from bundled server chunk (covers Vercel .next/server/... paths)
     let current = here;
     for (let i = 0; i < 8; i++) {
-      candidates.push(path.join(current, 'backend-dist'));
+      candidates.push(path.join(current, 'chainpilot-backend'));
       current = path.dirname(current);
     }
   }
@@ -32,6 +29,6 @@ export function resolveBackendDist(moduleUrl?: string): string {
   }
 
   throw new Error(
-    `ChainPilot backend not found. Tried: ${candidates.slice(0, 6).join(', ')}…`,
+    `ChainPilot backend not found. Tried: ${candidates.slice(0, 4).join(', ')}…`,
   );
 }

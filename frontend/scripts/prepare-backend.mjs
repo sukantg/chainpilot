@@ -1,4 +1,4 @@
-import { cpSync, existsSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execSync } from 'node:child_process';
@@ -6,7 +6,6 @@ import { execSync } from 'node:child_process';
 const frontendRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const repoRoot = path.join(frontendRoot, '..');
 const backendDistSrc = path.join(repoRoot, 'dist');
-const backendDistDest = path.join(frontendRoot, 'backend-dist');
 const serverBackendDest = path.join(frontendRoot, 'src/server/chainpilot-backend');
 
 function run(command, cwd) {
@@ -14,11 +13,20 @@ function run(command, cwd) {
   execSync(command, { cwd, stdio: 'inherit' });
 }
 
+function removeDir(dir) {
+  if (!existsSync(dir)) return;
+  rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+}
+
 console.log('Preparing ChainPilot backend for deployment...');
 
 if (!existsSync(path.join(repoRoot, 'package.json'))) {
   throw new Error(`Repo root not found at ${repoRoot}`);
 }
+
+const rootPackage = JSON.parse(
+  readFileSync(path.join(repoRoot, 'package.json'), 'utf8'),
+);
 
 const rootNodeModules = path.join(repoRoot, 'node_modules');
 if (!existsSync(rootNodeModules)) {
@@ -36,19 +44,28 @@ if (!existsSync(backendDistSrc)) {
   throw new Error(`Backend build failed: ${backendDistSrc} not found`);
 }
 
-if (existsSync(backendDistDest)) {
-  rmSync(backendDistDest, { recursive: true, force: true });
-}
-if (existsSync(serverBackendDest)) {
-  rmSync(serverBackendDest, { recursive: true, force: true });
-}
+removeDir(serverBackendDest);
 
-cpSync(backendDistSrc, backendDistDest, { recursive: true });
 cpSync(backendDistSrc, serverBackendDest, { recursive: true });
 
-const esmPackageJson = JSON.stringify({ type: 'module' }, null, 2);
-writeFileSync(path.join(backendDistDest, 'package.json'), esmPackageJson);
-writeFileSync(path.join(serverBackendDest, 'package.json'), esmPackageJson);
+const backendPackage = {
+  name: 'chainpilot-backend',
+  type: 'module',
+  private: true,
+  dependencies: {
+    '@hashgraph/sdk': rootPackage.dependencies['@hashgraph/sdk'],
+    dotenv: rootPackage.dependencies.dotenv,
+    graphql: rootPackage.dependencies.graph,
+    'graphql-request': rootPackage.dependencies['graphql-request'],
+  },
+};
 
-console.log(`Copied backend to ${backendDistDest}`);
-console.log(`Copied backend to ${serverBackendDest}`);
+writeFileSync(
+  path.join(serverBackendDest, 'package.json'),
+  JSON.stringify(backendPackage, null, 2),
+);
+
+console.log('Installing backend runtime dependencies...');
+run('npm install --omit=dev', serverBackendDest);
+
+console.log(`ChainPilot backend ready at ${serverBackendDest}`);
