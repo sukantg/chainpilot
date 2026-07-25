@@ -69,14 +69,21 @@ export default function DashboardPage() {
     setLoading(true);
     setError(null);
     try {
-      const [protocolsRes, walletRes] = await Promise.all([
-        api.listProtocols(),
-        api.walletBalance(),
-      ]);
-      setProtocols(protocolsRes.data.protocols);
-      setProtocolCount(protocolsRes.data.protocols.length);
-      setBalance(walletRes.data.hbar);
-      setAccountId(walletRes.data.accountId);
+      const protocolsRes = await api.listProtocols();
+      const items = protocolsRes.data.protocols ?? [];
+      setProtocols(items);
+      setProtocolCount(items.length);
+
+      try {
+        const walletRes = await api.walletBalance();
+        setBalance(walletRes.data.hbar);
+        setAccountId(walletRes.data.accountId);
+      } catch (walletErr) {
+        setBalance('Unavailable');
+        setAccountId(
+          walletErr instanceof Error ? walletErr.message : 'Wallet not configured',
+        );
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load dashboard');
     } finally {
@@ -109,7 +116,12 @@ export default function DashboardPage() {
           accent="accent"
           subtitle={accountId ?? undefined}
         />
-        <KpiCard label="Wallet Status" value="Connected" icon={Zap} subtitle="Hedera Testnet" />
+        <KpiCard
+          label="Wallet Status"
+          value={balance === 'Unavailable' ? 'Not configured' : 'Connected'}
+          icon={Zap}
+          subtitle="Hedera Testnet"
+        />
       </div>
 
       <div className="mb-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">

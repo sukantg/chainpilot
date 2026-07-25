@@ -7,6 +7,7 @@ const frontendRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..
 const repoRoot = path.join(frontendRoot, '..');
 const backendDistSrc = path.join(repoRoot, 'dist');
 const backendDistDest = path.join(frontendRoot, 'backend-dist');
+const serverBackendDest = path.join(frontendRoot, 'src/server/chainpilot-backend');
 
 function run(command, cwd) {
   console.log(`> ${command} (in ${cwd})`);
@@ -38,6 +39,11 @@ if (!existsSync(backendDistSrc)) {
 if (existsSync(backendDistDest)) {
   rmSync(backendDistDest, { recursive: true, force: true });
 }
+if (existsSync(serverBackendDest)) {
+  rmSync(serverBackendDest, { recursive: true, force: true });
+}
 
 cpSync(backendDistSrc, backendDistDest, { recursive: true });
+cpSync(backendDistSrc, serverBackendDest, { recursive: true });
 console.log(`Copied backend to ${backendDistDest}`);
+console.log(`Copied backend to ${serverBackendDest}`);

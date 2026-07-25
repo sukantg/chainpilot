@@ -20,6 +20,7 @@
 # production
 /build
 /backend-dist
+/src/server/chainpilot-backend
 
 # misc
 .DS_Store

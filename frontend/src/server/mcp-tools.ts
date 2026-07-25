@@ -37,7 +37,7 @@ interface BackendModules {
 let backendPromise: Promise<BackendModules> | null = null;
 
 async function loadBackend(): Promise<BackendModules> {
-  const dist = resolveBackendDist();
+  const dist = resolveBackendDist(import.meta.url);
 
   const importFromDist = (modulePath: string) =>
     import(/* webpackIgnore: true */ pathToFileURL(path.join(dist, modulePath)).href);

@@ -1,20 +1,37 @@
 import path from 'path';
 import { existsSync } from 'fs';
+import { fileURLToPath } from 'url';
 
-/** Resolve compiled ChainPilot backend (local dev vs Vercel). */
-export function resolveBackendDist(): string {
-  const candidates = [
+function isBackendDist(dir: string): boolean {
+  return existsSync(path.join(dir, 'graph', 'compare.js'));
+}
+
+/** Resolve compiled ChainPilot backend (local dev vs Vercel serverless). */
+export function resolveBackendDist(moduleUrl?: string): string {
+  const candidates: string[] = [
+    path.join(process.cwd(), 'src/server/chainpilot-backend'),
     path.join(process.cwd(), 'backend-dist'),
+    path.join(process.cwd(), 'frontend', 'backend-dist'),
     path.join(process.cwd(), '..', 'dist'),
   ];
 
+  if (moduleUrl) {
+    const here = path.dirname(fileURLToPath(moduleUrl));
+    // Walk up from bundled server chunk (covers Vercel .next/server/... paths)
+    let current = here;
+    for (let i = 0; i < 8; i++) {
+      candidates.push(path.join(current, 'backend-dist'));
+      current = path.dirname(current);
+    }
+  }
+
   for (const candidate of candidates) {
-    if (existsSync(path.join(candidate, 'graph', 'compare.js'))) {
+    if (isBackendDist(candidate)) {
       return candidate;
     }
   }
 
   throw new Error(
-    'ChainPilot backend not found. Run "npm run build:backend" from frontend/ or deploy with vercel-build.',
+    `ChainPilot backend not found. Tried: ${candidates.slice(0, 6).join(', ')}…`,
   );
 }
