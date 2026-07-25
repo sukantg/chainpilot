@@ -8,7 +8,7 @@ ChainPilot is an MCP (Model Context Protocol) server that lets AI agents query l
 
 ## Problem
 
-AI coding agents frequently hallucinate TVL, volume, and transaction counts when asked about DeFi protocols. Developers need a reliable, tool-driven workflow that returns **live blockchain data** — and a way to monetize premium research without traditional payment rails.
+AI coding agents frequently hallucinate Total Value Locked, volume, and transaction counts when asked about DeFi protocols. Developers need a reliable, tool-driven workflow that returns **live blockchain data** — and a way to monetize premium research without traditional payment rails.
 
 ## Solution
 
