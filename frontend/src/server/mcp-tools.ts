@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import path from 'path';
 import { pathToFileURL } from 'url';
 import { loadBackendEnv } from './env';
@@ -11,7 +12,7 @@ export interface McpToolResult {
   isError: boolean;
 }
 
-interface BackendModules {
+interface CoreBackendModules {
   compareMultipleProtocols: (protocols: string[]) => Promise<unknown>;
   getMarketSummary: () => Promise<unknown>;
   getProtocol: (name: string) => Promise<{
@@ -35,7 +36,9 @@ interface BackendModules {
     paymentTxId?: string;
     paymentStatus?: string;
   }) => Promise<{ report: string; payment: Record<string, unknown> }>;
-  hashResult: (data: unknown) => string;
+}
+
+interface HcsBackendModules {
   logReceiptToHCS: (payload: {
     tool: string;
     paymentTxId: string;
@@ -45,29 +48,37 @@ interface BackendModules {
   }) => Promise<string>;
 }
 
-let backendPromise: Promise<BackendModules> | null = null;
+const CORE_BACKEND_MODULES = [
+  'graph/compare.js',
+  'graph/client.js',
+  'graph/config.js',
+  'hedera/client.js',
+  'src/purchase-research.js',
+] as const;
 
-async function loadBackend(): Promise<BackendModules> {
+let backendDistPath: string | null = null;
+let coreBackendPromise: Promise<CoreBackendModules> | null = null;
+let hcsBackendPromise: Promise<HcsBackendModules | null> | null = null;
+
+function importFromDist(dist: string, modulePath: string) {
+  return import(/* webpackIgnore: true */ pathToFileURL(path.join(dist, modulePath)).href);
+}
+
+async function loadCoreBackend(): Promise<CoreBackendModules> {
   let dist: string;
   try {
     dist = resolveBackendDist(import.meta.url);
   } catch (error) {
-    backendPromise = null;
+    coreBackendPromise = null;
     throw error;
   }
 
-  const importFromDist = (modulePath: string) =>
-    import(/* webpackIgnore: true */ pathToFileURL(path.join(dist, modulePath)).href);
+  backendDistPath = dist;
 
   try {
-    const [compare, client, config, hedera, research, hcs] = await Promise.all([
-      importFromDist('graph/compare.js'),
-      importFromDist('graph/client.js'),
-      importFromDist('graph/config.js'),
-      importFromDist('hedera/client.js'),
-      importFromDist('src/purchase-research.js'),
-      importFromDist('hedera/hcs.js'),
-    ]);
+    const [compare, client, config, hedera, research] = await Promise.all(
+      CORE_BACKEND_MODULES.map((modulePath) => importFromDist(dist, modulePath)),
+    );
 
     return {
       compareMultipleProtocols: compare.compareMultipleProtocols,
@@ -77,21 +88,40 @@ async function loadBackend(): Promise<BackendModules> {
       getBalance: hedera.getBalance,
       transferHBAR: hedera.transferHBAR,
       purchaseResearch: research.purchaseResearch,
-      hashResult: hcs.hashResult,
-      logReceiptToHCS: hcs.logReceiptToHCS,
     };
   } catch (error) {
-    backendPromise = null;
+    coreBackendPromise = null;
+    backendDistPath = null;
     const message = error instanceof Error ? error.message : 'Unknown backend import error';
     throw new Error(`Failed to load ChainPilot backend from ${dist}: ${message}`);
   }
 }
 
-function getBackend(): Promise<BackendModules> {
-  if (!backendPromise) {
-    backendPromise = loadBackend();
+function getCoreBackend(): Promise<CoreBackendModules> {
+  if (!coreBackendPromise) {
+    coreBackendPromise = loadCoreBackend();
   }
-  return backendPromise;
+  return coreBackendPromise;
+}
+
+async function getHcsBackend(): Promise<HcsBackendModules | null> {
+  if (!hcsBackendPromise) {
+    hcsBackendPromise = (async () => {
+      try {
+        const dist = backendDistPath ?? resolveBackendDist(import.meta.url);
+        const hcs = await importFromDist(dist, 'hedera/hcs.js');
+        return { logReceiptToHCS: hcs.logReceiptToHCS };
+      } catch (error) {
+        console.error('HCS module unavailable:', error);
+        return null;
+      }
+    })();
+  }
+  return hcsBackendPromise;
+}
+
+function hashResult(data: unknown): string {
+  return createHash('sha256').update(JSON.stringify(data)).digest('hex');
 }
 
 export interface ExecuteMcpToolOptions {
@@ -110,7 +140,7 @@ export async function executeMcpTool(
   args: Record<string, unknown> = {},
   options: ExecuteMcpToolOptions = {},
 ): Promise<McpToolResultWithReceipt> {
-  const backend = await getBackend();
+  const backend = await getCoreBackend();
 
   let result: McpToolResult;
 
@@ -204,7 +234,7 @@ export async function executeMcpTool(
     };
   }
 
-  return attachReceipt(backend, name, args, result, options);
+  return attachReceipt(name, args, result, options);
 }
 
 export async function attachReceiptToResult(
@@ -213,12 +243,10 @@ export async function attachReceiptToResult(
   result: McpToolResult,
   options: ExecuteMcpToolOptions,
 ): Promise<McpToolResultWithReceipt> {
-  const backend = await getBackend();
-  return attachReceipt(backend, name, args, result, options);
+  return attachReceipt(name, args, result, options);
 }
 
 async function attachReceipt(
-  backend: BackendModules,
   name: McpToolName,
   args: Record<string, unknown>,
   result: McpToolResult,
@@ -229,8 +257,13 @@ async function attachReceipt(
   }
 
   try {
-    const resultHash = backend.hashResult(result.data);
-    const hcsTxId = await backend.logReceiptToHCS({
+    const hcs = await getHcsBackend();
+    if (!hcs) {
+      return result;
+    }
+
+    const resultHash = hashResult(result.data);
+    const hcsTxId = await hcs.logReceiptToHCS({
       tool: name,
       paymentTxId: options.paymentTxId,
       payer: options.payer,

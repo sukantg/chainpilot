@@ -58,6 +58,24 @@ removeDir(serverBackendDest);
 
 cpSync(backendDistSrc, serverBackendDest, { recursive: true });
 
+const requiredModules = [
+  'graph/compare.js',
+  'graph/client.js',
+  'graph/config.js',
+  'hedera/client.js',
+  'hedera/hcs.js',
+  'src/purchase-research.js',
+];
+
+for (const modulePath of requiredModules) {
+  const fullPath = path.join(serverBackendDest, modulePath);
+  if (!existsSync(fullPath)) {
+    throw new Error(`Backend build missing required module: ${modulePath}`);
+  }
+}
+
+console.log('Verified backend modules:', requiredModules.join(', '));
+
 const backendPackage = {
   name: 'chainpilot-backend',
   type: 'module',

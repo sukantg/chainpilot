@@ -7,6 +7,7 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     '/*': [backendBundle],
     '/api/mcp': [backendBundle],
+    '/api/health': [backendBundle],
   },
 };
 
