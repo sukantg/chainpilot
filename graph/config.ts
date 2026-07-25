@@ -31,6 +31,7 @@ export interface ProtocolGraphConfig {
 
 const UNISWAP_V3_FACTORY = '0x1F98431c8aD98523631AE4a59f267346ea31F984';
 const AAVE_V3_PROTOCOL_ID = '1';
+const CURVE_PROTOCOL_ID = '0x0000000022d53366457f9d5e68ec105046fc4383';
 
 export const UNISWAP_V3_QUERY = `
   query UniswapV3FactoryMetrics($id: ID!) {
@@ -77,18 +78,14 @@ export const AAVE_V3_QUERY = `
 `;
 
 export const CURVE_QUERY = `
-  query CurveProtocolMetrics {
-    systemInfo(id: "current") {
-      poolCount
-      exchangeCount
+  query CurveProtocolMetrics($id: ID!) {
+    dexAmmProtocol(id: $id) {
+      totalValueLockedUSD
+      cumulativeVolumeUSD
+      cumulativeUniqueUsers
     }
-    pools(first: 1000) {
-      virtualPrice
-      balances
-    }
-    tokenExchanges(first: 1000) {
-      tokensSold
-      tokensBought
+    usageMetricsDailySnapshots(first: 2500, orderBy: timestamp, orderDirection: asc) {
+      dailyTransactionCount
     }
   }
 `;
@@ -188,17 +185,13 @@ function transformAave(data: unknown): ProtocolMetrics {
 }
 
 interface CurveResponse {
-  systemInfo: {
-    poolCount: string;
-    exchangeCount: string;
+  dexAmmProtocol: {
+    totalValueLockedUSD: string;
+    cumulativeVolumeUSD: string;
+    cumulativeUniqueUsers: number;
   } | null;
-  pools: Array<{
-    virtualPrice: string;
-    balances: string[];
-  }>;
-  tokenExchanges: Array<{
-    tokensSold: string;
-    tokensBought: string;
+  usageMetricsDailySnapshots: Array<{
+    dailyTransactionCount: number;
   }>;
 }
 
@@ -219,32 +212,37 @@ function transformUniswap(data: unknown): ProtocolMetrics {
 function transformCurve(data: unknown): ProtocolMetrics {
   const response = data as CurveResponse;
 
-  if (!response.pools.length || !response.systemInfo) {
-    throw new Error('Curve pool data was not found in The Graph response');
+  if (!response.dexAmmProtocol) {
+    throw new Error('Curve Finance protocol data was not found in The Graph response');
   }
 
-  let totalValueLockedUSD = 0;
+  const { totalValueLockedUSD, cumulativeVolumeUSD } = response.dexAmmProtocol;
 
-  for (const pool of response.pools) {
-    const virtualPrice = Number(pool.virtualPrice);
-    const balanceTotal = pool.balances.reduce(
-      (sum, balance) => sum + Number(balance),
-      0,
-    );
-
-    totalValueLockedUSD += (balanceTotal * virtualPrice) / 1e18;
+  if (!totalValueLockedUSD || Number(totalValueLockedUSD) === 0) {
+    throw new Error('Curve Finance TVL was not found in The Graph response');
   }
 
-  const totalVolumeUSD = response.tokenExchanges.reduce((sum, exchange) => {
-    const sold = Number(exchange.tokensSold);
-    const bought = Number(exchange.tokensBought);
-    return sum + Math.max(sold, bought) / 1e18;
-  }, 0);
+  if (!cumulativeVolumeUSD || Number(cumulativeVolumeUSD) === 0) {
+    throw new Error('Curve Finance volume was not found in The Graph response');
+  }
+
+  if (!response.usageMetricsDailySnapshots.length) {
+    throw new Error('Curve Finance usage metrics were not found in The Graph response');
+  }
+
+  const txCount = response.usageMetricsDailySnapshots.reduce(
+    (sum, snapshot) => sum + snapshot.dailyTransactionCount,
+    0,
+  );
+
+  if (txCount === 0) {
+    throw new Error('Curve Finance transaction count was not found in The Graph response');
+  }
 
   return {
-    totalValueLockedUSD: totalValueLockedUSD.toString(),
-    totalVolumeUSD: totalVolumeUSD.toString(),
-    txCount: response.systemInfo.exchangeCount,
+    totalValueLockedUSD,
+    totalVolumeUSD: cumulativeVolumeUSD,
+    txCount: txCount.toString(),
   };
 }
 
@@ -264,6 +262,7 @@ export const PROTOCOL_GRAPH_CONFIG: Record<string, ProtocolGraphConfig> = {
   curve: {
     displayName: 'Curve',
     query: CURVE_QUERY,
+    variables: { id: CURVE_PROTOCOL_ID },
     transform: transformCurve,
   },
 };
