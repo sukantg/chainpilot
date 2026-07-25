@@ -1,4 +1,8 @@
-import { getProtocol, type Protocol } from './client.js';
+import {
+  getProtocol,
+  type Protocol,
+} from './client.js';
+import { getSupportedProtocols, isSupportedProtocol } from './config.js';
 
 export interface MetricComparison {
   protocolA: string;
@@ -74,6 +78,12 @@ export async function compareProtocols(
   protocolA: string,
   protocolB: string,
 ): Promise<ProtocolComparison> {
+  if (!isSupportedProtocol(protocolA) || !isSupportedProtocol(protocolB)) {
+    throw new Error(
+      `Both protocols must be supported for live comparison. Supported protocols: ${getSupportedProtocols().join(', ')}`,
+    );
+  }
+
   const [a, b] = await Promise.all([
     getProtocol(protocolA),
     getProtocol(protocolB),
