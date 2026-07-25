@@ -1,0 +1,124 @@
+'use client';
+
+import { Header } from '@/components/layout/header';
+import { KpiCard } from '@/components/shared/kpi-card';
+import { EmptyState, ErrorState } from '@/components/shared/states';
+import { Button } from '@/components/ui/button';
+import { Label, Select } from '@/components/ui/input';
+import { PageLoader } from '@/components/ui/skeleton';
+import { api } from '@/lib/api';
+import { formatCount, formatUsd } from '@/lib/utils';
+import { Activity, BarChart3, DollarSign, Layers, RefreshCw } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
+import { Suspense, useCallback, useEffect, useState } from 'react';
+
+function ProtocolExplorerContent() {
+  const searchParams = useSearchParams();
+  const [protocols, setProtocols] = useState<Array<{ id: string; name: string }>>([]);
+  const [selected, setSelected] = useState(searchParams.get('protocol') ?? 'uniswap');
+  const [loading, setLoading] = useState(true);
+  const [metricsLoading, setMetricsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [metrics, setMetrics] = useState<{
+    name: string;
+    tvl: string;
+    volume: string;
+    transactionCount: string;
+  } | null>(null);
+  const [refreshedAt, setRefreshedAt] = useState<string | null>(null);
+
+  const loadMetrics = useCallback(async (protocol: string) => {
+    setMetricsLoading(true);
+    setError(null);
+    try {
+      const res = await api.getProtocol(protocol);
+      if (res.isError) throw new Error(String(res.data));
+      setMetrics(res.data);
+      setRefreshedAt(new Date().toISOString());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load protocol');
+    } finally {
+      setMetricsLoading(false);
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void api.listProtocols().then((res) => {
+      setProtocols(res.data.protocols);
+    });
+  }, []);
+
+  useEffect(() => {
+    void loadMetrics(selected);
+  }, [selected, loadMetrics]);
+
+  if (loading && !metrics) return <PageLoader />;
+  if (error && !metrics) return <ErrorState message={error} onRetry={() => loadMetrics(selected)} />;
+
+  return (
+    <>
+      <Header
+        title="Protocol Explorer"
+        description="Live Protocol Metrics from The Graph — TVL, volume, and transaction count."
+        badge="On-chain Analytics"
+      />
+
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end">
+        <div className="w-full max-w-xs space-y-2">
+          <Label htmlFor="protocol-select">Protocol</Label>
+          <Select
+            id="protocol-select"
+            value={selected}
+            onChange={(e) => setSelected(e.target.value)}
+            aria-label="Select protocol"
+          >
+            {protocols.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <Button variant="outline" onClick={() => loadMetrics(selected)} disabled={metricsLoading}>
+          <RefreshCw className={`h-4 w-4 ${metricsLoading ? 'animate-spin' : ''}`} />
+          Refresh
+        </Button>
+      </div>
+
+      {!metrics ? (
+        <EmptyState
+          icon={Layers}
+          title="No protocol selected"
+          description="Choose a protocol to view live on-chain metrics."
+        />
+      ) : (
+        <>
+          <div className="grid gap-4 md:grid-cols-3">
+            <KpiCard label="TVL" value={formatUsd(metrics.tvl)} icon={DollarSign} />
+            <KpiCard label="Volume" value={formatUsd(metrics.volume)} icon={BarChart3} accent="secondary" />
+            <KpiCard
+              label="Transactions"
+              value={formatCount(metrics.transactionCount)}
+              icon={Activity}
+              accent="accent"
+            />
+          </div>
+          {refreshedAt && (
+            <p className="mt-4 text-xs text-muted">
+              Last refreshed: {new Date(refreshedAt).toLocaleString()}
+            </p>
+          )}
+        </>
+      )}
+    </>
+  );
+}
+
+export default function ProtocolsPage() {
+  return (
+    <Suspense fallback={<PageLoader />}>
+      <ProtocolExplorerContent />
+    </Suspense>
+  );
+}
