@@ -288,5 +288,19 @@ export function getSupportedProtocols(): string[] {
   return Object.keys(PROTOCOL_GRAPH_CONFIG);
 }
 
+export interface ProtocolSummary {
+  id: string;
+  name: string;
+  supported: boolean;
+}
+
+export function listProtocols(): ProtocolSummary[] {
+  return getSupportedProtocols().map((id) => ({
+    id,
+    name: PROTOCOL_GRAPH_CONFIG[id].displayName,
+    supported: isSupportedProtocol(id),
+  }));
+}
+
 /** @deprecated Use UNISWAP_V3_QUERY instead. Kept for backward compatibility. */
 export const PROTOCOL_QUERY = UNISWAP_V3_QUERY;

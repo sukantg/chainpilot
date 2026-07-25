@@ -21,6 +21,38 @@ export interface ProtocolComparison {
   recommendation: string;
 }
 
+export interface ProtocolRankEntry {
+  rank: number;
+  id: string;
+  name: string;
+  value: string;
+}
+
+export interface ProtocolHighlight {
+  id: string;
+  name: string;
+  value: string;
+}
+
+export interface MarketSummary {
+  protocolsAnalyzed: number;
+  highestTvl: ProtocolHighlight;
+  highestVolume: ProtocolHighlight;
+  highestTransactionCount: ProtocolHighlight;
+  rankingByTvl: ProtocolRankEntry[];
+  rankingByVolume: ProtocolRankEntry[];
+  rankingByTransactions: ProtocolRankEntry[];
+  overallStrongestProtocol: Pick<Protocol, 'id' | 'name'>;
+}
+
+const METRIC_LABELS = {
+  totalValueLockedUSD: 'TVL',
+  totalVolumeUSD: 'volume',
+  txCount: 'transaction count',
+} as const;
+
+type MetricKey = keyof typeof METRIC_LABELS;
+
 function compareMetric(
   valueA: string,
   valueB: string,
@@ -32,6 +64,76 @@ function compareMetric(
   return { leader: a > b ? 'protocolA' : 'protocolB' };
 }
 
+function rankByMetric(protocols: Protocol[], metric: MetricKey): ProtocolRankEntry[] {
+  return [...protocols]
+    .sort((a, b) => Number(b[metric]) - Number(a[metric]))
+    .map((protocol, index) => ({
+      rank: index + 1,
+      id: protocol.id,
+      name: protocol.name,
+      value: protocol[metric],
+    }));
+}
+
+function getMetricHighlight(protocols: Protocol[], metric: MetricKey): ProtocolHighlight {
+  const [leader] = rankByMetric(protocols, metric);
+
+  return {
+    id: leader.id,
+    name: leader.name,
+    value: leader.value,
+  };
+}
+
+function countMetricWins(
+  protocolA: Protocol,
+  protocolB: Protocol,
+): { winsA: string[]; winsB: string[] } {
+  const winsA: string[] = [];
+  const winsB: string[] = [];
+
+  for (const [key, label] of Object.entries(METRIC_LABELS)) {
+    const { leader } = compareMetric(
+      protocolA[key as MetricKey],
+      protocolB[key as MetricKey],
+    );
+
+    if (leader === 'protocolA') winsA.push(label);
+    if (leader === 'protocolB') winsB.push(label);
+  }
+
+  return { winsA, winsB };
+}
+
+function determineOverallStrongest(
+  protocols: Protocol[],
+): Pick<Protocol, 'id' | 'name'> {
+  const wins = new Map<string, number>();
+
+  for (const protocol of protocols) {
+    wins.set(protocol.id, 0);
+  }
+
+  for (const metric of Object.keys(METRIC_LABELS) as MetricKey[]) {
+    const ranking = rankByMetric(protocols, metric);
+    const topValue = ranking[0]?.value;
+
+    for (const entry of ranking) {
+      if (entry.value !== topValue) break;
+      wins.set(entry.id, (wins.get(entry.id) ?? 0) + 1);
+    }
+  }
+
+  const maxWins = Math.max(...wins.values());
+  const leaders = protocols.filter((protocol) => wins.get(protocol.id) === maxWins);
+  const [strongest] = rankByMetric(leaders, 'totalValueLockedUSD');
+
+  return {
+    id: strongest.id,
+    name: strongest.name,
+  };
+}
+
 function protocolLabel(protocol: Protocol): string {
   return protocol.name;
 }
@@ -39,25 +141,10 @@ function protocolLabel(protocol: Protocol): string {
 function buildRecommendation(
   protocolA: Protocol,
   protocolB: Protocol,
-  metrics: ProtocolComparison['metrics'],
 ): string {
   const nameA = protocolLabel(protocolA);
   const nameB = protocolLabel(protocolB);
-
-  const metricLabels = {
-    totalValueLockedUSD: 'TVL',
-    totalVolumeUSD: 'volume',
-    txCount: 'transaction count',
-  } as const;
-
-  const winsA: string[] = [];
-  const winsB: string[] = [];
-
-  for (const [key, label] of Object.entries(metricLabels)) {
-    const leader = metrics[key as keyof typeof metricLabels].leader;
-    if (leader === 'protocolA') winsA.push(label);
-    if (leader === 'protocolB') winsB.push(label);
-  }
+  const { winsA, winsB } = countMetricWins(protocolA, protocolB);
 
   if (winsA.length > winsB.length) {
     return `${nameA} is the stronger overall choice: it leads on ${winsA.join(', ')}. Prefer ${nameA} for broader on-chain activity and liquidity depth.`;
@@ -72,6 +159,22 @@ function buildRecommendation(
   }
 
   return `Metrics are mixed: ${nameA} leads on ${winsA.join(', ')} while ${nameB} leads on ${winsB.join(', ')}. Prefer ${nameA} where ${winsA[0]} matters most and ${nameB} where ${winsB[0]} matters most.`;
+}
+
+export async function getMarketSummary(): Promise<MarketSummary> {
+  const protocolIds = getSupportedProtocols();
+  const protocols = await Promise.all(protocolIds.map((id) => getProtocol(id)));
+
+  return {
+    protocolsAnalyzed: protocols.length,
+    highestTvl: getMetricHighlight(protocols, 'totalValueLockedUSD'),
+    highestVolume: getMetricHighlight(protocols, 'totalVolumeUSD'),
+    highestTransactionCount: getMetricHighlight(protocols, 'txCount'),
+    rankingByTvl: rankByMetric(protocols, 'totalValueLockedUSD'),
+    rankingByVolume: rankByMetric(protocols, 'totalVolumeUSD'),
+    rankingByTransactions: rankByMetric(protocols, 'txCount'),
+    overallStrongestProtocol: determineOverallStrongest(protocols),
+  };
 }
 
 export async function compareProtocols(
@@ -111,6 +214,6 @@ export async function compareProtocols(
     protocolA: a,
     protocolB: b,
     metrics,
-    recommendation: buildRecommendation(a, b, metrics),
+    recommendation: buildRecommendation(a, b),
   };
 }

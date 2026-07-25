@@ -1,7 +1,9 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import * as z from 'zod/v4';
-import { compareProtocols } from '../graph/compare.js';
+import { compareProtocols, getMarketSummary } from '../graph/compare.js';
+import { getProtocol } from '../graph/client.js';
+import { listProtocols } from '../graph/config.js';
 import { getBalance, transferHBAR } from '../hedera/client.js';
 import { purchaseResearch } from './purchase-research.js';
 
@@ -17,6 +19,93 @@ function createServer(): McpServer {
     async () => ({
       content: [{ type: 'text', text: 'Hello from ChainPilot' }],
     }),
+  );
+
+  server.registerTool(
+    'list_protocols',
+    {
+      description: 'Returns all supported DeFi protocols',
+      inputSchema: z.object({}),
+    },
+    async () => ({
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({ protocols: listProtocols() }, null, 2),
+        },
+      ],
+    }),
+  );
+
+  server.registerTool(
+    'get_protocol',
+    {
+      description: 'Fetch live metrics for a DeFi protocol',
+      inputSchema: z.object({
+        protocol: z.string().describe('Protocol name, e.g. uniswap'),
+      }),
+    },
+    async ({ protocol }) => {
+      try {
+        const result = await getProtocol(protocol);
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(
+                {
+                  name: result.name,
+                  tvl: result.totalValueLockedUSD,
+                  volume: result.totalVolumeUSD,
+                  transactionCount: result.txCount,
+                },
+                null,
+                2,
+              ),
+            },
+          ],
+        };
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : 'Failed to fetch protocol metrics';
+
+        return {
+          content: [{ type: 'text', text: message }],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  server.registerTool(
+    'market_summary',
+    {
+      description: 'Returns an overall market summary across all supported DeFi protocols',
+      inputSchema: z.object({}),
+    },
+    async () => {
+      try {
+        const summary = await getMarketSummary();
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(summary, null, 2),
+            },
+          ],
+        };
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : 'Failed to fetch market summary';
+
+        return {
+          content: [{ type: 'text', text: message }],
+          isError: true,
+        };
+      }
+    },
   );
 
   server.registerTool(
