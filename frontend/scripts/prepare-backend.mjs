@@ -1,4 +1,4 @@
-import { cpSync, existsSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execSync } from 'node:child_process';
@@ -45,5 +45,10 @@ if (existsSync(serverBackendDest)) {
 
 cpSync(backendDistSrc, backendDistDest, { recursive: true });
 cpSync(backendDistSrc, serverBackendDest, { recursive: true });
+
+const esmPackageJson = JSON.stringify({ type: 'module' }, null, 2);
+writeFileSync(path.join(backendDistDest, 'package.json'), esmPackageJson);
+writeFileSync(path.join(serverBackendDest, 'package.json'), esmPackageJson);
+
 console.log(`Copied backend to ${backendDistDest}`);
 console.log(`Copied backend to ${serverBackendDest}`);
